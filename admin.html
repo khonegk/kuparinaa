@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Вход — Книга рецептов</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<main class="login-wrap anim-fade-up">
+  <a href="index.html" class="brand">
+    <span class="brand-dot"></span>
+    <h1 class="site-title">Книга рецептов</h1>
+  </a>
+
+  <div class="form-card">
+    <div class="auth-tabs">
+      <button id="tabLogin" class="active" onclick="switchTab('login')">Войти</button>
+      <button id="tabRegister" onclick="switchTab('register')">Регистрация</button>
+    </div>
+
+    <div id="msgBox"></div>
+
+    <!-- Вход -->
+    <div id="panelLogin" class="auth-panel anim-fade">
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="loginPassword">Пароль</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <div class="form-actions">
+        <button class="btn" style="width:100%" onclick="doLogin()">Войти</button>
+      </div>
+    </div>
+
+    <!-- Регистрация -->
+    <div id="panelRegister" class="auth-panel hidden">
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input type="email" id="regEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="regPassword">Пароль</label>
+        <input type="password" id="regPassword" placeholder="Минимум 6 символов">
+      </div>
+      <div class="field">
+        <label for="regPassword2">Повтори пароль</label>
+        <input type="password" id="regPassword2" placeholder="Ещё раз">
+      </div>
+      <div class="form-actions">
+        <button class="btn" style="width:100%" onclick="doRegister()">Создать аккаунт</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+function switchTab(tab) {
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+  document.getElementById('panelLogin').classList.toggle('hidden', tab !== 'login');
+  document.getElementById('panelRegister').classList.toggle('hidden', tab !== 'register');
+  document.getElementById('panelLogin').classList.remove('anim-fade');
+  document.getElementById('panelRegister').classList.remove('anim-fade');
+  void document.getElementById(tab === 'login' ? 'panelLogin' : 'panelRegister').offsetWidth;
+  document.getElementById(tab === 'login' ? 'panelLogin' : 'panelRegister').classList.add('anim-fade');
+  document.getElementById('msgBox').innerHTML = '';
+}
+
+function showMsg(text, isError) {
+  document.getElementById('msgBox').innerHTML =
+    `<div class="msg ${isError ? 'msg-error' : 'msg-ok'}">${text}</div>`;
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+
+  if (!email || !password) {
+    showMsg('Заполни email и пароль.', true);
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    showMsg('Неверный email или пароль.', true);
+    return;
+  }
+
+  window.location.href = 'dashboard.html';
+}
+
+async function doRegister() {
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const password2 = document.getElementById('regPassword2').value;
+
+  if (!email || !password) {
+    showMsg('Заполни email и пароль.', true);
+    return;
+  }
+  if (password.length < 6) {
+    showMsg('Пароль должен быть не короче 6 символов.', true);
+    return;
+  }
+  if (password !== password2) {
+    showMsg('Пароли не совпадают.', true);
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+
+  if (error) {
+    showMsg('Не получилось зарегистрироваться: ' + error.message, true);
+    return;
+  }
+
+  if (data.session) {
+    window.location.href = 'dashboard.html';
+    return;
+  }
+
+  showMsg('Аккаунт создан. Проверь почту и подтверди email, потом зайди через вкладку «Войти».', false);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (!document.getElementById('panelRegister').classList.contains('hidden')) doRegister();
+  else doLogin();
+});
+
+// Если уже вошёл — сразу в панель
+supabaseClient.auth.getSession().then(({ data }) => {
+  if (data.session) window.location.href = 'dashboard.html';
+});
+</script>
+</body>
+</html>

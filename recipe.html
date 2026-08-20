@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Рецепт</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="flag-strip"></div>
+
+<header class="site-header">
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <span class="brand-dot"></span>
+      <h1 class="site-title">Книга рецептов</h1>
+    </a>
+    <nav class="site-nav">
+      <a href="index.html">Ко всем рецептам</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="content">
+    <div class="empty-state">Загружаю рецепт…</div>
+  </div>
+</main>
+
+<footer>Публичная ссылка &middot; только просмотр</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function linesToList(text, ordered) {
+  const items = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const tag = ordered ? 'ol' : 'ul';
+  return `<${tag}>${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</${tag}>`;
+}
+
+async function loadRecipe() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const content = document.getElementById('content');
+
+  if (!id) {
+    content.innerHTML = '<div class="empty-state">Рецепт не указан.</div>';
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('recipes')
+    .select('*')
+    .eq('id', id)
+    .eq('is_public', true)
+    .single();
+
+  if (error || !data) {
+    content.innerHTML = '<div class="empty-state">Рецепт не найден или закрыт для публичного просмотра.</div>';
+    return;
+  }
+
+  document.title = data.title + ' — Книга рецептов';
+
+  content.innerHTML = `
+    <div class="recipe-detail anim-fade-up">
+      ${data.image_url ? `<img src="${data.image_url}" alt="${escapeHtml(data.title)}">` : ''}
+      <h1>${escapeHtml(data.title)}</h1>
+      <div class="tag-row">
+        <span class="cat-tag">${escapeHtml(data.category || 'Разное')}</span>
+        <span class="lang-badge">${data.language === 'en' ? 'EN' : 'RU'}</span>
+      </div>
+
+      <h2>Ингредиенты</h2>
+      ${linesToList(data.ingredients, false)}
+
+      <h2>Приготовление</h2>
+      ${linesToList(data.instructions, true)}
+
+      <div class="share-box">
+        <input type="text" readonly value="${window.location.href}" onclick="this.select()">
+        <button class="btn btn-outline" onclick="copyLink()">Скопировать ссылку</button>
+      </div>
+    </div>
+  `;
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(window.location.href);
+}
+
+loadRecipe();
+</script>
+</body>
+</html>

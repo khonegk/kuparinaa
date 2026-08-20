@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мои рецепты</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <span class="brand-dot"></span>
+      <h1 class="site-title">Книга рецептов</h1>
+    </a>
+    <nav class="site-nav">
+      <a href="index.html">Публичная страница</a>
+      <button class="link-btn" onclick="doLogout()">Выйти</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="top-bar">
+    <h2>Мои рецепты</h2>
+    <a class="btn" href="edit.html">+ Новый рецепт</a>
+  </div>
+
+  <div id="list">
+    <div class="empty-state">Загружаю…</div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+let me = null;
+
+async function init() {
+  me = await requireAuth();
+  if (!me) return;
+  loadList();
+}
+
+async function loadList() {
+  const listEl = document.getElementById('list');
+  const { data, error } = await supabaseClient
+    .from('recipes')
+    .select('*')
+    .eq('user_id', me.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    listEl.innerHTML = `<div class="empty-state">Ошибка загрузки: ${error.message}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">Рецептов пока нет. Добавь первый.</div>';
+    return;
+  }
+
+  listEl.innerHTML = data.map(r => `
+    <div class="admin-list-row">
+      <div class="title-col">
+        <strong>${escapeHtml(r.title)}</strong>
+        <span class="card-meta">
+          ${escapeHtml(r.category || 'Разное')}
+          <span class="lang-badge">${r.language === 'en' ? 'EN' : 'RU'}</span>
+          ${r.is_public ? '<span class="badge-public">&middot; публичный</span>' : ''}
+        </span>
+      </div>
+      <div class="actions">
+        ${r.is_public ? `<a class="btn btn-outline" href="recipe.html?id=${r.id}" target="_blank">Ссылка</a>` : ''}
+        <a class="btn btn-outline" href="edit.html?id=${r.id}">Изменить</a>
+        <button class="btn btn-danger" onclick="deleteRecipe('${r.id}', '${escapeHtml(r.title)}')">Удалить</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function deleteRecipe(id, title) {
+  if (!confirm(`Удалить рецепт «${title}»? Это нельзя отменить.`)) return;
+
+  const { error } = await supabaseClient.from('recipes').delete().eq('id', id);
+  if (error) {
+    alert('Не получилось удалить: ' + error.message);
+    return;
+  }
+  loadList();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function doLogout() {
+  supabaseClient.auth.signOut().then(() => window.location.href = 'admin.html');
+}
+
+init();
+</script>
+</body>
+</html>

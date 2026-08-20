@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Рецепт — редактирование</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <span class="brand-dot"></span>
+      <h1 class="site-title">Книга рецептов</h1>
+    </a>
+    <nav class="site-nav">
+      <a href="dashboard.html">Назад к списку</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="form-card">
+    <h1 id="formTitle">Новый рецепт</h1>
+    <div id="msgBox"></div>
+
+    <div class="field">
+      <label for="title">Название</label>
+      <input type="text" id="title" placeholder="Например, Хинкал с говядиной">
+    </div>
+
+    <div class="field">
+      <label for="category">Категория</label>
+      <input type="text" id="category" placeholder="Например, Основные блюда">
+    </div>
+
+    <div class="field">
+      <label>Язык рецепта</label>
+      <div class="lang-select">
+        <button type="button" id="langRu" class="active" onclick="setLang('ru')">Русский</button>
+        <button type="button" id="langEn" onclick="setLang('en')">English</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="ingredients">Ингредиенты (каждый с новой строки)</label>
+      <textarea id="ingredients" placeholder="Мука — 500 г&#10;Вода — 250 мл&#10;Говядина — 600 г"></textarea>
+    </div>
+
+    <div class="field">
+      <label for="instructions">Шаги приготовления (каждый с новой строки)</label>
+      <textarea id="instructions" placeholder="Замесить тесто и оставить на 30 минут&#10;Отварить мясо до готовности"></textarea>
+    </div>
+
+    <div class="field">
+      <label for="imageFile">Картинка</label>
+      <input type="file" id="imageFile" accept="image/*">
+      <div class="field-hint">Можно оставить пустым, если фото не нужно.</div>
+      <img id="imagePreview" class="image-preview">
+    </div>
+
+    <div class="field">
+      <label class="field-checkbox">
+        <input type="checkbox" id="isPublic">
+        Публичный доступ (по ссылке смогут смотреть все, редактировать — только ты)
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" onclick="saveRecipe()">Сохранить</button>
+      <a class="btn btn-outline" href="dashboard.html">Отмена</a>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const editId = params.get('id');
+let existingImageUrl = null;
+let currentLang = 'ru';
+let me = null;
+
+async function init() {
+  me = await requireAuth();
+  if (!me) return;
+
+  if (editId) {
+    document.getElementById('formTitle').textContent = 'Изменить рецепт';
+    loadExisting();
+  }
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('langRu').classList.toggle('active', lang === 'ru');
+  document.getElementById('langEn').classList.toggle('active', lang === 'en');
+}
+
+async function loadExisting() {
+  const { data, error } = await supabaseClient
+    .from('recipes')
+    .select('*')
+    .eq('id', editId)
+    .single();
+
+  if (error || !data) {
+    showMsg('Не получилось загрузить рецепт для редактирования.', true);
+    return;
+  }
+
+  document.getElementById('title').value = data.title || '';
+  document.getElementById('category').value = data.category || '';
+  document.getElementById('ingredients').value = data.ingredients || '';
+  document.getElementById('instructions').value = data.instructions || '';
+  document.getElementById('isPublic').checked = !!data.is_public;
+  setLang(data.language === 'en' ? 'en' : 'ru');
+
+  if (data.image_url) {
+    existingImageUrl = data.image_url;
+    const preview = document.getElementById('imagePreview');
+    preview.src = data.image_url;
+    preview.style.display = 'block';
+  }
+}
+
+document.getElementById('imageFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const preview = document.getElementById('imagePreview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+});
+
+async function uploadImageIfNeeded() {
+  const file = document.getElementById('imageFile').files[0];
+  if (!file) return existingImageUrl;
+
+  const ext = file.name.split('.').pop();
+  const fileName = `${me.id}/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabaseClient
+    .storage
+    .from('recipe-images')
+    .upload(fileName, file);
+
+  if (uploadError) {
+    throw new Error('Не получилось загрузить картинку: ' + uploadError.message);
+  }
+
+  const { data } = supabaseClient.storage.from('recipe-images').getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+async function saveRecipe() {
+  const title = document.getElementById('title').value.trim();
+  const category = document.getElementById('category').value.trim() || 'Разное';
+  const ingredients = document.getElementById('ingredients').value.trim();
+  const instructions = document.getElementById('instructions').value.trim();
+  const isPublic = document.getElementById('isPublic').checked;
+
+  if (!title || !ingredients || !instructions) {
+    showMsg('Заполни название, ингредиенты и шаги приготовления.', true);
+    return;
+  }
+
+  try {
+    const imageUrl = await uploadImageIfNeeded();
+
+    const payload = {
+      title, category, ingredients, instructions,
+      language: currentLang,
+      image_url: imageUrl,
+      is_public: isPublic
+    };
+
+    let error;
+    if (editId) {
+      ({ error } = await supabaseClient.from('recipes').update(payload).eq('id', editId));
+    } else {
+      ({ error } = await supabaseClient.from('recipes').insert(payload));
+    }
+
+    if (error) throw new Error(error.message);
+
+    window.location.href = 'dashboard.html';
+  } catch (err) {
+    showMsg(err.message, true);
+  }
+}
+
+function showMsg(text, isError) {
+  const box = document.getElementById('msgBox');
+  box.innerHTML = `<div class="msg ${isError ? 'msg-error' : 'msg-ok'}">${text}</div>`;
+}
+
+init();
+</script>
+</body>
+</html>
