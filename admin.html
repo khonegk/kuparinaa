@@ -136,6 +136,11 @@ document.addEventListener('keydown', e => {
   else doLogin();
 });
 
+// Если пришли по ссылке .../admin.html#register — сразу открыть регистрацию
+if (window.location.hash === '#register') {
+  switchTab('register');
+}
+
 // Если уже вошёл — сразу в панель
 supabaseClient.auth.getSession().then(({ data }) => {
   if (data.session) window.location.href = 'dashboard.html';
