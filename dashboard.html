@@ -62,23 +62,28 @@ async function loadList() {
     return;
   }
 
-  listEl.innerHTML = data.map(r => `
+  listEl.innerHTML = data.map(r => {
+    const displayTitle = r.title_ru || r.title_en;
+    const linkLang = r.title_ru ? 'ru' : 'en';
+    return `
     <div class="admin-list-row">
       <div class="title-col">
-        <strong>${escapeHtml(r.title)}</strong>
+        <strong>${escapeHtml(displayTitle)}</strong>
         <span class="card-meta">
           ${escapeHtml(r.category || 'Разное')}
-          <span class="lang-badge">${r.language === 'en' ? 'EN' : 'RU'}</span>
+          ${r.title_ru ? '<span class="lang-badge">RU</span>' : ''}
+          ${r.title_en ? '<span class="lang-badge">EN</span>' : ''}
           ${r.is_public ? '<span class="badge-public">&middot; публичный</span>' : ''}
         </span>
       </div>
       <div class="actions">
-        ${r.is_public ? `<a class="btn btn-outline" href="recipe.html?id=${r.id}" target="_blank">Ссылка</a>` : ''}
+        ${r.is_public ? `<a class="btn btn-outline" href="recipe.html?id=${r.id}&lang=${linkLang}" target="_blank">Ссылка</a>` : ''}
         <a class="btn btn-outline" href="edit.html?id=${r.id}">Изменить</a>
-        <button class="btn btn-danger" onclick="deleteRecipe('${r.id}', '${escapeHtml(r.title)}')">Удалить</button>
+        <button class="btn btn-danger" onclick="deleteRecipe('${r.id}', '${escapeHtml(displayTitle)}')">Удалить</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function deleteRecipe(id, title) {

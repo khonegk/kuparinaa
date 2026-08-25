@@ -26,35 +26,51 @@
     <div id="msgBox"></div>
 
     <div class="field">
-      <label for="title">Название</label>
-      <input type="text" id="title" placeholder="Например, Хинкал с говядиной">
-    </div>
-
-    <div class="field">
-      <label for="category">Категория</label>
+      <label for="category">Категория (общая для обеих версий)</label>
       <input type="text" id="category" placeholder="Например, Основные блюда">
     </div>
 
     <div class="field">
-      <label>Язык рецепта</label>
+      <label>Какую версию сейчас заполняешь</label>
       <div class="lang-select">
         <button type="button" id="langRu" class="active" onclick="setLang('ru')">Русский</button>
         <button type="button" id="langEn" onclick="setLang('en')">English</button>
       </div>
+      <div class="field-hint">Обе версии сохраняются вместе. Можно заполнить только одну — тогда рецепт будет виден только в этом языковом фильтре.</div>
+    </div>
+
+    <div id="fieldsRu">
+      <div class="field">
+        <label for="titleRu">Название (RU)</label>
+        <input type="text" id="titleRu" placeholder="Например, Хинкал с говядиной">
+      </div>
+      <div class="field">
+        <label for="ingredientsRu">Ингредиенты RU (каждый с новой строки)</label>
+        <textarea id="ingredientsRu" placeholder="Мука — 500 г&#10;Вода — 250 мл&#10;Говядина — 600 г"></textarea>
+      </div>
+      <div class="field">
+        <label for="instructionsRu">Шаги приготовления RU (каждый с новой строки)</label>
+        <textarea id="instructionsRu" placeholder="Замесить тесто и оставить на 30 минут&#10;Отварить мясо до готовности"></textarea>
+      </div>
+    </div>
+
+    <div id="fieldsEn" style="display:none">
+      <div class="field">
+        <label for="titleEn">Title (EN)</label>
+        <input type="text" id="titleEn" placeholder="e.g. Beef Khinkal">
+      </div>
+      <div class="field">
+        <label for="ingredientsEn">Ingredients EN (one per line)</label>
+        <textarea id="ingredientsEn" placeholder="Flour — 500 g&#10;Water — 250 ml&#10;Beef — 600 g"></textarea>
+      </div>
+      <div class="field">
+        <label for="instructionsEn">Instructions EN (one per line)</label>
+        <textarea id="instructionsEn" placeholder="Knead the dough and rest for 30 minutes&#10;Boil the meat until done"></textarea>
+      </div>
     </div>
 
     <div class="field">
-      <label for="ingredients">Ингредиенты (каждый с новой строки)</label>
-      <textarea id="ingredients" placeholder="Мука — 500 г&#10;Вода — 250 мл&#10;Говядина — 600 г"></textarea>
-    </div>
-
-    <div class="field">
-      <label for="instructions">Шаги приготовления (каждый с новой строки)</label>
-      <textarea id="instructions" placeholder="Замесить тесто и оставить на 30 минут&#10;Отварить мясо до готовности"></textarea>
-    </div>
-
-    <div class="field">
-      <label for="imageFile">Картинка</label>
+      <label for="imageFile">Картинка (общая для обеих версий)</label>
       <input type="file" id="imageFile" accept="image/*">
       <div class="field-hint">Можно оставить пустым, если фото не нужно.</div>
       <img id="imagePreview" class="image-preview">
@@ -81,7 +97,6 @@
 const params = new URLSearchParams(window.location.search);
 const editId = params.get('id');
 let existingImageUrl = null;
-let currentLang = 'ru';
 let me = null;
 
 async function init() {
@@ -95,9 +110,10 @@ async function init() {
 }
 
 function setLang(lang) {
-  currentLang = lang;
   document.getElementById('langRu').classList.toggle('active', lang === 'ru');
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
+  document.getElementById('fieldsRu').style.display = lang === 'ru' ? 'block' : 'none';
+  document.getElementById('fieldsEn').style.display = lang === 'en' ? 'block' : 'none';
 }
 
 async function loadExisting() {
@@ -112,12 +128,20 @@ async function loadExisting() {
     return;
   }
 
-  document.getElementById('title').value = data.title || '';
   document.getElementById('category').value = data.category || '';
-  document.getElementById('ingredients').value = data.ingredients || '';
-  document.getElementById('instructions').value = data.instructions || '';
+
+  document.getElementById('titleRu').value = data.title_ru || '';
+  document.getElementById('ingredientsRu').value = data.ingredients_ru || '';
+  document.getElementById('instructionsRu').value = data.instructions_ru || '';
+
+  document.getElementById('titleEn').value = data.title_en || '';
+  document.getElementById('ingredientsEn').value = data.ingredients_en || '';
+  document.getElementById('instructionsEn').value = data.instructions_en || '';
+
   document.getElementById('isPublic').checked = !!data.is_public;
-  setLang(data.language === 'en' ? 'en' : 'ru');
+
+  // Открыть ту версию, где реально есть текст
+  setLang(data.title_ru ? 'ru' : 'en');
 
   if (data.image_url) {
     existingImageUrl = data.image_url;
@@ -155,15 +179,30 @@ async function uploadImageIfNeeded() {
   return data.publicUrl;
 }
 
+function readLangGroup(prefix) {
+  const title = document.getElementById(`title${prefix}`).value.trim();
+  const ingredients = document.getElementById(`ingredients${prefix}`).value.trim();
+  const instructions = document.getElementById(`instructions${prefix}`).value.trim();
+  const filled = [title, ingredients, instructions].filter(Boolean).length;
+  return { title, ingredients, instructions, filled };
+}
+
 async function saveRecipe() {
-  const title = document.getElementById('title').value.trim();
   const category = document.getElementById('category').value.trim() || 'Разное';
-  const ingredients = document.getElementById('ingredients').value.trim();
-  const instructions = document.getElementById('instructions').value.trim();
+  const ru = readLangGroup('Ru');
+  const en = readLangGroup('En');
   const isPublic = document.getElementById('isPublic').checked;
 
-  if (!title || !ingredients || !instructions) {
-    showMsg('Заполни название, ингредиенты и шаги приготовления.', true);
+  if (ru.filled > 0 && ru.filled < 3) {
+    showMsg('Русская версия заполнена не полностью — нужны название, ингредиенты и шаги (или оставь все три поля пустыми).', true);
+    return;
+  }
+  if (en.filled > 0 && en.filled < 3) {
+    showMsg('English version is incomplete — fill title, ingredients and steps, or leave all three empty.', true);
+    return;
+  }
+  if (ru.filled === 0 && en.filled === 0) {
+    showMsg('Заполни хотя бы одну языковую версию рецепта.', true);
     return;
   }
 
@@ -171,8 +210,13 @@ async function saveRecipe() {
     const imageUrl = await uploadImageIfNeeded();
 
     const payload = {
-      title, category, ingredients, instructions,
-      language: currentLang,
+      category,
+      title_ru: ru.filled ? ru.title : null,
+      ingredients_ru: ru.filled ? ru.ingredients : null,
+      instructions_ru: ru.filled ? ru.instructions : null,
+      title_en: en.filled ? en.title : null,
+      ingredients_en: en.filled ? en.ingredients : null,
+      instructions_en: en.filled ? en.instructions : null,
       image_url: imageUrl,
       is_public: isPublic
     };

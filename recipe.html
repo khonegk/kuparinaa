@@ -35,6 +35,9 @@
 <script src="js/config.js"></script>
 <script src="js/nav.js"></script>
 <script>
+let recipeData = null;
+let currentLang = 'ru';
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
@@ -50,6 +53,7 @@ function linesToList(text, ordered) {
 async function loadRecipe() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
+  const requestedLang = params.get('lang');
   const content = document.getElementById('content');
 
   if (!id) {
@@ -69,33 +73,69 @@ async function loadRecipe() {
     return;
   }
 
-  document.title = data.title + ' — Книга рецептов';
+  recipeData = data;
 
-  content.innerHTML = `
+  if (requestedLang === 'en' && data.title_en) currentLang = 'en';
+  else if (requestedLang === 'ru' && data.title_ru) currentLang = 'ru';
+  else currentLang = data.title_ru ? 'ru' : 'en';
+
+  renderRecipe();
+}
+
+function renderRecipe() {
+  const data = recipeData;
+  const isEn = currentLang === 'en';
+  const title = isEn ? data.title_en : data.title_ru;
+  const ingredients = isEn ? data.ingredients_en : data.ingredients_ru;
+  const instructions = isEn ? data.instructions_en : data.instructions_ru;
+  const hasBoth = data.title_ru && data.title_en;
+
+  document.title = title + ' — Книга рецептов';
+
+  const ingredientsLabel = isEn ? 'Ingredients' : 'Ингредиенты';
+  const instructionsLabel = isEn ? 'Instructions' : 'Приготовление';
+  const copyLabel = isEn ? 'Copy link' : 'Скопировать ссылку';
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}?id=${data.id}&lang=${currentLang}`;
+
+  document.getElementById('content').innerHTML = `
     <div class="recipe-detail anim-fade-up">
-      ${data.image_url ? `<img src="${data.image_url}" alt="${escapeHtml(data.title)}">` : ''}
-      <h1>${escapeHtml(data.title)}</h1>
+      ${data.image_url ? `<img src="${data.image_url}" alt="${escapeHtml(title)}">` : ''}
+      <h1>${escapeHtml(title)}</h1>
       <div class="tag-row">
         <span class="cat-tag">${escapeHtml(data.category || 'Разное')}</span>
-        <span class="lang-badge">${data.language === 'en' ? 'EN' : 'RU'}</span>
+        ${hasBoth
+          ? `<div class="lang-toggle" style="display:inline-flex;">
+               <button class="${!isEn ? 'active' : ''}" onclick="switchLang('ru')">RU</button>
+               <button class="${isEn ? 'active' : ''}" onclick="switchLang('en')">EN</button>
+             </div>`
+          : `<span class="lang-badge">${currentLang.toUpperCase()}</span>`}
       </div>
 
-      <h2>Ингредиенты</h2>
-      ${linesToList(data.ingredients, false)}
+      <h2>${ingredientsLabel}</h2>
+      ${linesToList(ingredients, false)}
 
-      <h2>Приготовление</h2>
-      ${linesToList(data.instructions, true)}
+      <h2>${instructionsLabel}</h2>
+      ${linesToList(instructions, true)}
 
       <div class="share-box">
-        <input type="text" readonly value="${window.location.href}" onclick="this.select()">
-        <button class="btn btn-outline" onclick="copyLink()">Скопировать ссылку</button>
+        <input type="text" readonly value="${shareUrl}" onclick="this.select()">
+        <button class="btn btn-outline" onclick="copyLink()">${copyLabel}</button>
       </div>
     </div>
   `;
 }
 
+function switchLang(lang) {
+  currentLang = lang;
+  const url = new URL(window.location);
+  url.searchParams.set('lang', lang);
+  window.history.replaceState({}, '', url);
+  renderRecipe();
+}
+
 function copyLink() {
-  navigator.clipboard.writeText(window.location.href);
+  navigator.clipboard.writeText(document.querySelector('.share-box input').value);
 }
 
 loadRecipe();
