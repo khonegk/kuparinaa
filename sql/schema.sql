@@ -1,9 +1,10 @@
 -- ============================================================
--- Схема базы данных для сайта рецептов (версия 2: логин+пароль)
+-- Схема базы данных для сайта рецептов (версия 3: RU/EN как
+-- отдельные поля внутри одного рецепта, а не как метка).
 -- Выполнить в Supabase: Dashboard -> SQL Editor -> New query
 --
--- Если таблица recipes уже создавалась раньше (первая версия
--- проекта, только с паролем) - сначала выполни:
+-- Это ломающее изменение структуры таблицы. Если recipes уже
+-- существует (любая более ранняя версия) - сначала выполни:
 --   drop table if exists recipes cascade;
 -- и только потом запускай этот файл целиком.
 -- ============================================================
@@ -11,15 +12,26 @@
 create table if not exists recipes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  title text not null,
+
   category text default 'Разное',
-  language text not null default 'ru' check (language in ('ru', 'en')),
-  ingredients text not null,      -- список ингредиентов, каждый с новой строки
-  instructions text not null,     -- шаги приготовления, каждый с новой строки
-  image_url text,                 -- ссылка на картинку в Storage
-  is_public boolean not null default false,  -- показывать ли рецепт по публичной ссылке
+
+  title_ru text,
+  ingredients_ru text,
+  instructions_ru text,
+
+  title_en text,
+  ingredients_en text,
+  instructions_en text,
+
+  image_url text,
+  is_public boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  -- у рецепта должна быть заполнена хотя бы одна языковая версия
+  constraint has_at_least_one_language check (
+    coalesce(title_ru, '') <> '' or coalesce(title_en, '') <> ''
+  )
 );
 
 create index if not exists idx_recipes_public on recipes (is_public, created_at desc);
@@ -27,38 +39,32 @@ create index if not exists idx_recipes_user on recipes (user_id, created_at desc
 
 alter table recipes enable row level security;
 
--- Гость (не вошёл в аккаунт) видит только публичные рецепты
 create policy "anon_read_public_recipes"
   on recipes for select
   to anon
   using (is_public = true);
 
--- Вошедший пользователь видит: чужие публичные + все свои (и приватные тоже)
 create policy "auth_read_public_and_own"
   on recipes for select
   to authenticated
   using (is_public = true or user_id = auth.uid());
 
--- Добавлять можно только от своего имени
 create policy "auth_insert_own"
   on recipes for insert
   to authenticated
   with check (user_id = auth.uid());
 
--- Редактировать можно только свои рецепты
 create policy "auth_update_own"
   on recipes for update
   to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
--- Удалять можно только свои рецепты
 create policy "auth_delete_own"
   on recipes for delete
   to authenticated
   using (user_id = auth.uid());
 
--- Автоматическое обновление updated_at при изменении записи
 create or replace function set_updated_at()
 returns trigger as $$
 begin
@@ -73,14 +79,9 @@ create trigger trg_recipes_updated_at
   for each row execute function set_updated_at();
 
 -- ============================================================
--- Хранилище картинок (Storage)
--- Bucket нужно создать вручную: Dashboard -> Storage -> New bucket
--- Имя: recipe-images, Public bucket: включить
--- После создания выполнить политики ниже.
---
--- Картинки каждого пользователя лежат в своей "папке" внутри
--- бакета (папка = его user_id), поэтому один пользователь не
--- может стереть или заменить чужую картинку.
+-- Хранилище картинок (Storage) — без изменений с прошлой версии.
+-- Если бакет recipe-images и политики уже созданы раньше,
+-- этот блок можно не перезапускать.
 -- ============================================================
 
 create policy "anon_read_recipe_images"

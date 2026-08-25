@@ -52,6 +52,20 @@ function pluralizeRecipes(n) {
   return 'рецептов';
 }
 
+// Возвращает контент рецепта на нужном языке.
+// lang: 'ru' | 'en'. Если запрошенной версии нет — вернёт null.
+function pickLang(r, lang) {
+  if (lang === 'en') {
+    return r.title_en ? { title: r.title_en, lang: 'en' } : null;
+  }
+  return r.title_ru ? { title: r.title_ru, lang: 'ru' } : null;
+}
+
+// Для режима "Все": показываем RU, если есть, иначе EN.
+function pickAny(r) {
+  return pickLang(r, 'ru') || pickLang(r, 'en');
+}
+
 async function loadRecipes() {
   const grid = document.getElementById('cardGrid');
   const { data, error } = await supabaseClient
@@ -103,17 +117,23 @@ function setLangFilter(lang) {
 
 function renderGrid() {
   const grid = document.getElementById('cardGrid');
+
   let list = activeCategory === 'all'
     ? allRecipes
     : allRecipes.filter(r => (r.category || 'Разное') === activeCategory);
 
-  if (activeLang !== 'all') {
-    list = list.filter(r => (r.language || 'ru') === activeLang);
-  }
+  // Оставляем только рецепты, у которых есть версия на выбранном языке,
+  // и сразу прикрепляем к каждому, какую версию показывать.
+  list = list
+    .map(r => {
+      const shown = activeLang === 'all' ? pickAny(r) : pickLang(r, activeLang);
+      return shown ? { ...r, _shown: shown } : null;
+    })
+    .filter(Boolean);
 
   if (searchQuery.trim()) {
     const q = searchQuery.trim().toLowerCase();
-    list = list.filter(r => (r.title || '').toLowerCase().includes(q));
+    list = list.filter(r => r._shown.title.toLowerCase().includes(q));
   }
 
   if (list.length === 0) {
@@ -122,14 +142,17 @@ function renderGrid() {
   }
 
   grid.innerHTML = list.map((r, i) => `
-    <a class="recipe-card anim-fade-up" style="animation-delay:${Math.min(i * 45, 400)}ms" href="recipe.html?id=${r.id}">
+    <a class="recipe-card anim-fade-up" style="animation-delay:${Math.min(i * 45, 400)}ms" href="recipe.html?id=${r.id}&lang=${r._shown.lang}">
       ${r.image_url
-        ? `<img src="${r.image_url}" alt="${escapeHtml(r.title)}">`
+        ? `<img src="${r.image_url}" alt="${escapeHtml(r._shown.title)}">`
         : `<div class="no-image">без фото</div>`}
-      <h3>${escapeHtml(r.title)}</h3>
+      <h3>${escapeHtml(r._shown.title)}</h3>
       <div class="card-meta">
         <span>${escapeHtml(r.category || 'Разное')}</span>
-        <span class="lang-badge">${r.language === 'en' ? 'EN' : 'RU'}</span>
+        <span style="display:flex; gap:0.3rem;">
+          ${r.title_ru ? '<span class="lang-badge">RU</span>' : ''}
+          ${r.title_en ? '<span class="lang-badge">EN</span>' : ''}
+        </span>
       </div>
     </a>
   `).join('');
